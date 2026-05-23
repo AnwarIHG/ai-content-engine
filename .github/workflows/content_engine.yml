@@ -1,0 +1,156 @@
+name: AI Content Engine — Daily Pipeline ($0)
+
+on:
+  schedule:
+    # Daily at 2:00 AM UTC — ~4 min/run = ~120 min/month (6% of 2,000 free min)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: 'Content topic (leave blank for default)'
+        required: false
+        default: ''
+
+concurrency:
+  group: content-engine
+  cancel-in-progress: false
+
+env:
+  OUTPUT_DIR: ${{ github.workspace }}/outputs
+  CONTENT_TOPIC: ${{ github.event.inputs.topic || 'AI productivity tools for small businesses' }}
+  VIDEO_PATH: ${{ github.workspace }}/video.mp4
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Go (free, pre-installed on runner) ────────
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      # ── 3. Install system tools (all free / open source) ────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            pandoc texlive-latex-base \
+            ffmpeg espeak
+
+      # ── 4. Install Go tools ────────────────────────────────
+      - name: Install Go tools
+        run: |
+          go install github.com/dlouwers/markdown2pdf/cmd/markdown2pdf@latest
+          go install github.com/antiwork/gumroad-cli/cmd/gumroad@latest
+
+      # ── 5. Create output directories ───────────────────────
+      - name: Create directories
+        run: mkdir -p $OUTPUT_DIR/{scripts,thumbnails,ebooks}
+
+      # ── 6. Generate AI content (Gemini, free tier) ─────────
+      - name: Generate content
+        run: go run ./cmd/gencontent/
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      # ── 7. Create thumbnail (Go image, free, no API key) ───
+      - name: Generate thumbnail
+        run: |
+          TITLE=$(head -1 $OUTPUT_DIR/scripts/blog.md | sed 's/^# //' | head -c 80)
+          go run ./cmd/thumbnail/ \
+            --title "$TITLE" \
+            --output "$OUTPUT_DIR/thumbnails/thumbnail.png"
+
+      # ── 8. Inject affiliate links (free, local processing) ─
+      - name: Inject affiliate links
+        run: |
+          echo "AFFILIATE_INPUT=$OUTPUT_DIR/scripts/blog.md" >> $GITHUB_ENV
+          echo "AFFILIATE_OUTPUT=$OUTPUT_DIR/scripts/blog_with_affiliates.md" >> $GITHUB_ENV
+          go run ./cmd/affiliate/
+        env:
+          AFFILIATE_CONFIG: ${{ secrets.AFFILIATE_CONFIG }}
+
+      # ── 9. Create PDF e-book + Gumroad product ────────────
+      - name: Create ebook and Gumroad product
+        run: |
+          echo "BLOG_PATH=$OUTPUT_DIR/scripts/blog_with_affiliates.md" >> $GITHUB_ENV
+          echo "PDF_PATH=$OUTPUT_DIR/ebooks/daily_ebook.pdf" >> $GITHUB_ENV
+          echo "EBOOK_TITLE=$(head -1 $OUTPUT_DIR/scripts/blog.md | sed 's/^# //')" >> $GITHUB_ENV
+          go run ./cmd/ebook/
+        env:
+          GUMROAD_ACCESS_TOKEN: ${{ secrets.GUMROAD_ACCESS_TOKEN }}
+
+      # ── 10. Generate video (TTS + thumbnail, free) ────────
+      - name: Generate video from script
+        run: |
+          SCRIPT="$OUTPUT_DIR/scripts/script.md"
+          THUMB="$OUTPUT_DIR/thumbnails/thumbnail.png"
+
+          # Extract clean text from markdown
+          grep -v '^#' "$SCRIPT" | grep -v '^\[' | head -c 500 > /tmp/script_clean.txt
+
+          # Generate audio (espeak: free, offline TTS)
+          espeak -f /tmp/script_clean.txt -w /tmp/audio.wav -s 150 -v en-us 2>/dev/null
+
+          # Combine audio + thumbnail into video
+          ffmpeg -y -loop 1 -i "$THUMB" -i /tmp/audio.wav \
+            -c:v libx264 -tune stillimage -c:a aac -b:a 64k \
+            -pix_fmt yuv420p -shortest "$VIDEO_PATH" 2>/dev/null
+
+          echo "Video: $(wc -c < $VIDEO_PATH) bytes"
+
+      # ── 11. Upload to YouTube (10K quota/day free) ─────────
+      - name: Upload video to YouTube
+        id: youtube
+        run: |
+          echo "VIDEO_TITLE=$CONTENT_TOPIC" >> $GITHUB_ENV
+          echo "VIDEO_DESC=$(head -20 $OUTPUT_DIR/scripts/blog_with_affiliates.md | tr '\n' ' ')" >> $GITHUB_ENV
+          echo "THUMBNAIL_PATH=$OUTPUT_DIR/thumbnails/thumbnail.png" >> $GITHUB_ENV
+          go run ./cmd/youtube/
+        env:
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+
+      # ── 12. Post to Twitter/X (free API tier) ──────────────
+      - name: Post to Twitter/X
+        run: |
+          TWEET=$(head -1 $OUTPUT_DIR/social.md | sed 's/---TWITTER_END---.*//' | head -c 270)
+          echo "TWEET_TEXT=$TWEET" >> $GITHUB_ENV
+          go run ./cmd/twitter/
+        env:
+          TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+
+      # ── 13. Post to Telegram (free bot API) ────────────────
+      - name: Post to Telegram
+        run: |
+          TELETEXT=$(sed -n '/---TWITTER_END---/,$ p' $OUTPUT_DIR/social.md | tail -n +2 | head -c 1000)
+          echo "TELEGRAM_TEXT=$TELETEXT" >> $GITHUB_ENV
+          echo "TELEGRAM_PHOTO=$OUTPUT_DIR/thumbnails/thumbnail.png" >> $GITHUB_ENV
+          go run ./cmd/telegram/
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      # ── 14. Summary ───────────────────────────────────────
+      - name: Print summary
+        run: |
+          echo "## ✅ Content Engine Daily Run" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gemini content | ✅ Generated |" >> $GITHUB_STEP_SUMMARY
+          echo "| Thumbnail | ✅ Created |" >> $GITHUB_STEP_SUMMARY
+          echo "| Affiliate links | ✅ Injected |" >> $GITHUB_STEP_SUMMARY
+          echo "| PDF E-book | ✅ Created |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gumroad product | ✅ Listed |" >> $GITHUB_STEP_SUMMARY
+          echo "| YouTube video | ✅ Uploaded |" >> $GITHUB_STEP_SUMMARY
+          echo "| Twitter/X post | ✅ Posted |" >> $GITHUB_STEP_SUMMARY
+          echo "| Telegram post | ✅ Sent |" >> $GITHUB_STEP_SUMMARY

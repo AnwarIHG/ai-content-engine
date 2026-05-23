@@ -1,0 +1,28 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+go.work
+go.work.sum
+
+# Outputs
+/outputs/
+/thumbnails/
+/ebooks/
+
+# Temp
+/tmp/
+*.pickle
+client_secret.json
+youtube_token.*
+/token.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

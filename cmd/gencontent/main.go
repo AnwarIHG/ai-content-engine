@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/anwar/ai-content-engine/internal/env"
 	"github.com/anwar/ai-content-engine/internal/gemini"
 )
 
 func main() {
+	env.Load()
 	topic := os.Getenv("CONTENT_TOPIC")
 	if topic == "" {
 		topic = "AI productivity tools for small businesses"

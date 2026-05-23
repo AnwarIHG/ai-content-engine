@@ -9,6 +9,9 @@
 go.work
 go.work.sum
 
+# Secrets
+.env
+
 # Outputs
 /outputs/
 /thumbnails/

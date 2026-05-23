@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	github.com/fogleman/gg v1.3.0
+	github.com/joho/godotenv v1.5.1
 	golang.org/x/image v0.41.0
 	golang.org/x/net v0.55.0
 	golang.org/x/oauth2 v0.36.0

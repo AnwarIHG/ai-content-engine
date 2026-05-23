@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 
 	"github.com/anwar/ai-content-engine/internal/canva"
+	"github.com/anwar/ai-content-engine/internal/env"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
 
 func main() {
+	env.Load()
 	title := flag.String("title", "AI Content Engine", "Thumbnail title text")
 	output := flag.String("output", "outputs/thumbnails/thumbnail.png", "Output PNG path")
 	flag.Parse()

@@ -6,10 +6,12 @@ import (
 	"log"
 	"os"
 
+	"github.com/anwar/ai-content-engine/internal/env"
 	"github.com/anwar/ai-content-engine/internal/telegram"
 )
 
 func main() {
+	env.Load()
 	text := os.Getenv("TELEGRAM_TEXT")
 	photo := os.Getenv("TELEGRAM_PHOTO")
 

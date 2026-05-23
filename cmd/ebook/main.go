@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 
 	"github.com/anwar/ai-content-engine/internal/affiliate"
+	"github.com/anwar/ai-content-engine/internal/env"
 )
 
 func main() {
+	env.Load()
 	mdPath := os.Getenv("BLOG_PATH")
 	pdfPath := os.Getenv("PDF_PATH")
 	title := os.Getenv("EBOOK_TITLE")

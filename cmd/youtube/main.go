@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 
+	"github.com/anwar/ai-content-engine/internal/env"
 	"github.com/anwar/ai-content-engine/internal/youtube"
 	"golang.org/x/net/context"
 )
 
 func main() {
+	env.Load()
 	videoPath := os.Getenv("VIDEO_PATH")
 	title := os.Getenv("VIDEO_TITLE")
 	desc := os.Getenv("VIDEO_DESC")

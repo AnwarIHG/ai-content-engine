@@ -6,9 +6,11 @@ import (
 	"os"
 
 	"github.com/anwar/ai-content-engine/internal/affiliate"
+	"github.com/anwar/ai-content-engine/internal/env"
 )
 
 func main() {
+	env.Load()
 	input := os.Getenv("AFFILIATE_INPUT")
 	output := os.Getenv("AFFILIATE_OUTPUT")
 
